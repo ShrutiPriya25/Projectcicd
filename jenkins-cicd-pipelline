@@ -1,0 +1,100 @@
+pipeline {
+    agent any
+
+    tools {
+        jdk 'jdk21'
+        maven 'maven3'
+    }
+
+    environment {
+        IMAGE_NAME = "ravikumardevops/boardshack:latest"
+        TRIVY_CACHE_DIR = "/var/lib/jenkins/trivy-cache"
+        TMPDIR = "/opt/trivy-tmp"
+    }
+
+    stages {
+
+        stage('Git Checkout') {
+            steps {
+                git url: 'https://github.com/RavikumarSB/Projectcicd.git',
+                    branch: 'main'
+            }
+        }
+
+        stage('Maven Build') {
+            steps {
+                sh 'mvn clean package -DskipTests'
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('sonar') {
+                    sh '''
+                    mvn sonar:sonar \
+                      -Dsonar.projectKey=boardshack \
+                      -Dsonar.projectName=boardshack \
+                      -Dsonar.sources=src/main/java
+                    '''
+                }
+            }
+        }
+
+        stage('Quality Gate') {
+            steps {
+                script {
+                    waitForQualityGate abortPipeline: false
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh 'docker build -t ${IMAGE_NAME} .'
+            }
+        }
+
+        stage('Trivy FileSystem Scan') {
+            steps {
+                sh '''
+                trivy fs . \
+                  --scanners vuln \
+                  --cache-dir $TRIVY_CACHE_DIR \
+                  --format table -o trivy-fs-report.html
+                '''
+            }
+        }
+
+        stage('Trivy Image Scan') {
+            steps {
+                sh '''
+                trivy image ${IMAGE_NAME} \
+                  --scanners vuln \
+                  --cache-dir $TRIVY_CACHE_DIR \
+                  --format table -o trivy-image-report.html
+                '''
+            }
+        }
+
+        stage('Docker Login & Push') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'docker-cred',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    sh '''
+                    echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+                    docker push ${IMAGE_NAME}
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            archiveArtifacts artifacts: '*.html', fingerprint: true
+        }
+    }
+}
