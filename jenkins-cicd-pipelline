@@ -7,7 +7,7 @@ pipeline {
     }
 
     environment {
-        IMAGE_NAME = "ravikumardevops/boardshack:latest"
+        IMAGE_NAME = "shrutipriya2001/boardshack:latest"
         TRIVY_CACHE_DIR = "/var/lib/jenkins/trivy-cache"
         TMPDIR = "/opt/trivy-tmp"
     }
@@ -16,7 +16,7 @@ pipeline {
 
         stage('Git Checkout') {
             steps {
-                git url: 'https://github.com/RavikumarSB/Projectcicd.git',
+                git url: 'https://github.com/ShrutiPriya25/Projectcicd.git',
                     branch: 'main'
             }
         }
